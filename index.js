@@ -181,7 +181,65 @@ function saveExpense(expense) {
   data.push(expense);
   fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
+function getMonthlyReport(year, month) {
+  const filePath = "./expenses.json";
+  if (!fs.existsSync(filePath)) return null;
 
+  const data = JSON.parse(fs.readFileSync(filePath));
+
+  const filtered = data.filter(e => {
+    if (!e.date) return false;
+    return e.date.startsWith(`${year}-${month}`);
+  });
+
+  let total = 0;
+  const byCategory = {};
+
+  for (const e of filtered) {
+    total += e.amount || 0;
+    byCategory[e.category] = (byCategory[e.category] || 0) + (e.amount || 0);
+  }
+
+  return {
+    total,
+    byCategory
+  };
+}
+async function generateCoachAdvice(report) {
+  let summary = "Ангиллын задаргаа:\n";
+  for (const cat in report.byCategory) {
+    summary += `${cat}: ${report.byCategory[cat]}₮\n`;
+  }
+
+  const prompt = `
+Чи Монгол хэрэглэгчид урам өгдөг, ойлгомжтой санхүүгийн coach.
+
+Сарын зардлын мэдээлэл:
+Нийт: ${report.total}₮
+${summary}
+
+Хэрэглэгчид:
+- зэмлэхгүй
+- бодит зөвлөгөө
+- богино, хэрэгтэй тайлбар өг
+`;
+
+  const res = await axios.post(
+    "https://api.openai.com/v1/chat/completions",
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      }
+    }
+  );
+
+  return res.data.choices[0].message.content.trim();
+}
 /* =========================
    PHOTO HANDLER
 ========================= */
@@ -282,4 +340,33 @@ bot.on("callback_query", async (query) => {
     );
     return;
   }
+});
+bot.onText(/\/april/, async (msg) => {
+  const chatId = msg.chat.id;
+
+  const report = getMonthlyReport("2026", "04");
+
+  if (!report) {
+    await bot.sendMessage(chatId, "4-р сарын зардлын мэдээлэл олдсонгүй ❌");
+    return;
+  }
+
+  let message = `📊 *2026 оны 4-р сарын тайлан*\n\n`;
+  message += `💰 *Нийт зардал:* ${report.total.toLocaleString()}₮\n\n`;
+  message += `*Ангиллаар:*\n`;
+
+  for (const cat in report.byCategory) {
+    message += `${cat} – ${report.byCategory[cat].toLocaleString()}₮\n`;
+  }
+
+  await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+
+  // 🤖 AI Coach
+  const advice = await generateCoachAdvice(report);
+
+  await bot.sendMessage(
+    chatId,
+    `🤖 *AI Coach зөвлөгөө:*\n${advice}`,
+    { parse_mode: "Markdown" }
+  );
 });
