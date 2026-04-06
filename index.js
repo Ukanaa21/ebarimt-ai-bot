@@ -239,11 +239,20 @@ bot.on("photo", async (msg) => {
   );
 });
 bot.on("callback_query", async (query) => {
-  // ✅ ЭНЭ МӨР ХАМГИЙН ЧУХАЛ
+  // ✅ Telegram-д “авлаа” гэж хариулна
   await bot.answerCallbackQuery(query.id);
 
   const chatId = query.message.chat.id;
 
+  // ✅ ЗӨВ дарсан үед
+  if (query.data === "ok") {
+    await bot.sendMessage(chatId, "✅ Ойлголоо, энэ ангиллыг баталгаажууллаа.");
+
+    // (хүсвэл энд keyboard-ийг устгаж болно)
+    return;
+  }
+
+  // ✏️ Засах дарсан үед
   if (query.data === "fix") {
     await bot.sendMessage(chatId, "Ямар ангилал вэ?", {
       reply_markup: {
@@ -256,17 +265,21 @@ bot.on("callback_query", async (query) => {
         ]
       }
     });
+    return;
   }
 
+  // 🏷️ Ангилал сонгосон үед
   if (query.data.startsWith("cat:")) {
     const category = query.data.split("cat:")[1];
-    const merchantKey = "monos";
+    const merchantKey = "monos"; // түр, дараа OCR-оос dynamic болгоно
 
     saveOverride(merchantKey, category);
 
     await bot.sendMessage(
       chatId,
-      `✅ Заслаа!\nДараагийн удаа **МОНОС → ${category}** гэж автоматаар танина ✅`
+      `✅ Заслаа!\nДараагийн удаа *МОНОС → ${category}* гэж автоматаар танина ✅`,
+      { parse_mode: "Markdown" }
     );
+    return;
   }
 });
